@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>360 Spin Viewer (Responsive Slider + Stage + Pingpong + Big Button)</title>
+  <style>
+    :root { --track: rgba(0,0,0,0.45); --progress: rgba(0,0,0,0.85); }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:transparent}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Helvetica,Arial}
+    .wrap{background:transparent;display:grid;gap:2px}
+    .stage{position:relative;width:100%;aspect-ratio:16/9;background:transparent;user-select:none;-webkit-user-select:none;touch-action:pan-y;overflow:hidden}
+    canvas{width:100%;height:100%;display:block;background:transparent}
+    .notice{position:absolute;inset:0;display:grid;place-items:center;background:transparent}
+    .spinner{width:40px;height:40px;border:3px solid rgba(0,0,0,0.2);border-top-color:rgba(0,0,0,0.7);border-radius:50%;animation:spin 0.9s linear infinite}
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .slider{background:transparent;width:min(720px,92vw);margin:-6px auto 0;position:relative;touch-action:none}
+    svg{display:block;width:100%;height:auto;overflow:visible}
+    .track{fill:none;stroke:var(--track);stroke-width:1;stroke-linecap:round;stroke-dasharray:4 4}
+    .progress{fill:none;stroke:var(--progress);stroke-width:3;stroke-linecap:round}
+    .cursor-img{cursor:pointer;pointer-events:all}
+      .top-bar{display:flex;justify-content:center;padding:8px 12px;pointer-events:none;}
+    #toggleViewBtn{
+    pointer-events:auto;
+    border:1px solid rgba(0,0,0,0.25);
+    background:#FFFFFF;
+    padding:6px 28px;
+    border-radius:999px;
+    cursor:pointer;
+    font-family:'Be Vietnam Pro', sans-serif;
+    font-size:14px;
+    font-weight:500;
+}
+#toggleViewBtn:hover{
+    background:rgba(0,0,0,0.05);
+}
+
+    .info-text{
+      text-align:center;
+      font-family:'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+      font-size:16px;
+      color:#000;
+      padding:8px 16px 4px;
+      line-height:1.4;
+      width:min(720px,92vw);
+      margin:0 auto;
+    }
+
+    .info-text h2{
+      margin:0 0 4px;
+      font-size:18px;
+      font-weight:600;
+    }
+
+    .info-text p{
+      margin:0;
+      font-size:14px;
+      font-weight:400;
+    }
+
+
+    /* Aircraft info card (designer-style) */
+    .aircard{
+      position:relative;
+      width:min(720px,92vw);
+      margin:0 auto;
+      padding:14px 18px 8px;
+      text-align:center;
+      font-family:'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+      color:#000;
+    }
+    .aircard-title{
+      position:relative;
+      z-index:1;
+      margin:6px 0 10px;
+      font-size:44px;
+      line-height:1.05;
+      font-weight:800;
+      letter-spacing:-0.02em;
+    }
+    .aircard-body{
+      position:relative;
+      z-index:1;
+      margin:0 auto 14px;
+      max-width:620px;
+      font-size:14px;
+      line-height:1.5;
+      font-weight:400;
+      opacity:0.95;
+    }
+
+    .aircard-stats{
+      position:relative;
+      z-index:1;
+      display:flex;
+      justify-content:center;
+      gap:26px;
+      flex-wrap:wrap;
+      margin:14px 0 0;
+      font-size:13px;
+    }
+    .stat{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      white-space:nowrap;
+    }
+    .stat-ico{
+      width:18px;
+      height:18px;
+      object-fit:contain;
+      display:block;
+      flex:0 0 18px;
+    }
+    .stat-ico-spacer{
+      width:18px;
+      height:18px;
+      display:block;
+      flex:0 0 18px;
+    }
+
+    </style>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="top-bar">
+    <button id="toggleViewBtn" type="button">View interior</button>
+  </div>
+  <div class="wrap">
+    <div class="stage" id="stage" aria-label="360 spin viewer">
+      <canvas id="cnv"></canvas>
+      <div class="notice" id="notice" aria-live="polite">
+        <div class="spinner" aria-label="Loading"></div>
+      </div>
+    </div>
+
+    <div id="infoText" class="info-text"></div>
+
+    <div class="slider" id="slider">
+      <svg id="svg" viewBox="0 0 720 240" aria-hidden="true">
+        <path id="pathTrack" class="track" d="M 20 40 Q 360 220 700 40" />
+        <path id="pathProgress" class="progress" d="M 20 40 Q 360 220 700 40"
+              pathLength="100" stroke-dasharray="0 100" />
+        <image id="cursorImg" class="cursor-img" href="" x="0" y="0" width="84" height="84"/>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const params = new URLSearchParams(location.search);
+  let autoplayCancel = false;
+  let autoplayActive = false;
+  function stopAutoplay(){ autoplayCancel = true; }
+  const DEFAULT_BASE = params.get('base') || 'https://airpartners-digitaljets.b-cdn.net/Jets/';
+  const inferSlugFromFile = () => {
+    const m = location.pathname.match(/([^\/]+)\.html$/i);
+    return m ? m[1] : null;
+  };
+  const slug = params.get('slug') || inferSlugFromFile() || 'EXT_TLH';
+
+  // Aircraft-specific text based on slug (tail suffix, e.g. EXT_HHM -> HHM)
+  (function(){
+    const infoEl = document.getElementById('infoText');
+    if (!infoEl) return;
+
+    // Extract last 3 letters of tail code from slug (e.g. EXT_HHM / INT_HHM)
+    const code = (slug || '').slice(-3).toUpperCase();
+
+    // Icon assets (PNG)
+    const ICONS = {
+      pax:   'https://AirPartners-DigitalJets.b-cdn.net/Jets/passanger.png',
+      bag:   'https://AirPartners-DigitalJets.b-cdn.net/Jets/luggage.png',
+      wifi:  'https://AirPartners-DigitalJets.b-cdn.net/Jets/wifi.png',
+      range: 'https://AirPartners-DigitalJets.b-cdn.net/Jets/range.png',
+      speed: 'https://AirPartners-DigitalJets.b-cdn.net/Jets/speed.png'
+    };
+
+    const aircraftText = {
+      KHD: {
+        title: 'C-GKHD King Air 350',
+        body: 'The King Air 350 private plane builds on the legacy of the King Air 200, featuring upgraded engines and an extended cabin length by nearly three feet. With double club seating and increased takeoff weight, it provides comfort and versatility, while still accessing smaller airports with ease.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 8 (+1 on lav seat)' },
+          { k:'bag',  v:'Baggage capacity: 55 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: No' },
+          { k:'range',v:'Range: 2,200 km' },
+          { k:'speed',v:'Speed: 350 mph' },
+          { k:null,   v:'Interior: 19\'6\"L x 4\'11\"W x 4\'10\"H' },
+          { k:null,   v:'Cabin volume: 355 cubic ft' }
+        ]
+      },
+
+      XLI: {
+        title: 'C-GXLI Citation Excel',
+        body: 'This Citation Excel private plane is among the best-selling jets of all time. Its 18-foot cabin accommodates up to eight guests, doubling as a sophisticated in-flight conference room with a full refreshment center and class-leading baggage capacity—perfect for both business and leisure.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 8' },
+          { k:'bag',  v:'Baggage capacity: 79 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: No' },
+          { k:'range',v:'Range: 3,150 km' },
+          { k:'speed',v:'Speed: 485 mph' },
+          { k:null,   v:'Interior: 18\'8\"L x 5\'7\"W x 5\'8\"H' },
+          { k:null,   v:'Cabin volume: 422 cubic ft' }
+        ]
+      },
+
+      IAP: {
+        title: 'C-FIAP Citation Excel',
+        body: 'The Citation Excel private plane has earned its place as one of the best-selling jets. Its 18-foot cabin comfortably seats up to eight guests, making it perfect for both business meetings and leisure escapes. With a full refreshment center and the largest baggage compartment in its class, the Citation Excel doubles as an in-flight conference room or an exclusive retreat.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 8' },
+          { k:'bag',  v:'Baggage capacity: 79 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: No' },
+          { k:'range',v:'Range: 3,150 km' },
+          { k:'speed',v:'Speed: 485 mph' },
+          { k:null,   v:'Interior: 18\'8\"L x 5\'7\"W x 5\'8\"H' },
+          { k:null,   v:'Cabin volume: 422 cubic ft' }
+        ]
+      },
+
+      KHJ: {
+        title: 'C-FKHJ Citation Excel',
+        body: 'The Citation Excel private plane is a highly sought-after aircraft known for its outstanding performance and luxurious comfort. As a regional business jet, it serves as an elegant in-flight conference room, equipped with a full refreshment center and the largest baggage compartment in its class.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 8' },
+          { k:'bag',  v:'Baggage capacity: 79 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: No' },
+          { k:'range',v:'Range: 3,150 km' },
+          { k:'speed',v:'Speed: 485 mph' },
+          { k:null,   v:'Interior: 18\'8\"L x 5\'7\"W x 5\'8\"H' },
+          { k:null,   v:'Cabin volume: 422 cubic ft' }
+        ]
+      },
+
+      YMD: {
+        title: 'C-GYMD Learjet 75',
+        body: 'The Learjet 75 private plane, an evolution of the Learjet 45XR, features upgraded engines, refined avionics, and redesigned winglets for improved fuel efficiency. Perfect for short to medium-haul flights, it offers a quiet cabin ideal for working in transit or enjoying a restful, luxurious journey.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 8 (+1 on the lav seat)' },
+          { k:'bag',  v:'Baggage capacity: 50 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: Yes' },
+          { k:'range',v:'Range: 2,800 km' },
+          { k:'speed',v:'Speed: 530 mph' },
+          { k:null,   v:'Interior: 19\'9\"L x 5\'1\"W x 4\'11\"H' },
+          { k:null,   v:'Cabin volume: 415 cubic ft' }
+        ]
+      },
+
+      AFK: {
+        title: 'C-GAFK Gulfstream G150',
+        body: 'The Gulfstream G150 private plane provides a bright, spacious cabin with 5 feet 9 inches of headroom and panoramic windows. With seating for 6 to 8 passengers and a range of 5,467 km, it is perfect for non-stop business or leisure flights in comfort and style.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 7 (+1 on the lav seat)' },
+          { k:'bag',  v:'Baggage capacity: 80 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: No' },
+          { k:'range',v:'Range: 5,467 km' },
+          { k:'speed',v:'Speed: 528 mph' },
+          { k:null,   v:'Interior: 17\'3\"L x 5\'8\"W x 5\'9\" H' },
+          { k:null,   v:'Cabin volume: 465 cubic ft' }
+        ]
+      },
+
+      AXX: {
+        title: 'C-GAXX Citation X',
+        body: 'The Citation X private plane, the second-fastest private jet in production, combines sleek lines and a stand-up cabin to cruise at Mach 0.9 at 51,000 feet. Its double club seating and fully enclosed lavatory provide long-range comfort for executives and discerning travelers.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 8 (+1 on lav seat)' },
+          { k:'bag',  v:'Baggage capacity: 82 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: No' },
+          { k:'range',v:'Range: 5,350 km' },
+          { k:'speed',v:'Speed: 600 mph' },
+          { k:null,   v:'Interior: 23\'10\"L x 5\'7\"W x 5\'10\"H' },
+          { k:null,   v:'Cabin volume: 538 cubic ft' }
+        ]
+      },
+
+      WRX: {
+        title: 'C-FWRX Citation X',
+        body: 'The Citation X private plane offers a spacious stand-up cabin, complete with a fully enclosed lavatory and potable water, ensuring every journey is comfortable and convenient. The double club seating provides a refined space for relaxation or in-flight productivity, making it the ultimate choice for long-range missions where luxury and performance meet seamlessly.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 8 (+1 on lav seat)' },
+          { k:'bag',  v:'Baggage capacity: 82 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: Yes' },
+          { k:'range',v:'Range: 5,350 km' },
+          { k:'speed',v:'Speed: 600 mph' },
+          { k:null,   v:'Interior: 23\'10\"L x 5\'7\"W x 5\'10\"H' },
+          { k:null,   v:'Cabin volume: 538 cubic ft' }
+        ]
+      },
+
+      JDZ: {
+        title: 'C-FJDZ Citation X',
+        body: 'This aircraft is a masterpiece of aviation engineering, blending a sleek design with aerodynamic clean lines. Inside, the stand-up cabin provides ample space for relaxation and features a double club seating arrangement. This makes the Citation X private plane an excellent choice for long-range missions, where every detail of the journey is essential.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 8' },
+          { k:'bag',  v:'Baggage capacity: 82 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: No' },
+          { k:'range',v:'Range: 5,350 km' },
+          { k:'speed',v:'Speed: 600 mph' },
+          { k:null,   v:'Interior: 23\'10\"L x 5\'7\"W x 5\'10\"H' },
+          { k:null,   v:'Cabin volume: 538 cubic ft' }
+        ]
+      },
+
+      TJS: {
+        title: 'C-FTJS Citation X',
+        body: 'Every journey on the Citation X combines speed, sophistication, and convenience. It can reach a speed of Mach 0.9 at 51,000 feet, making it one of the fastest private planes in the sky. Inside, the stand-up cabin includes a fully enclosed lavatory and access to potable water, while the double club seating offers comfort and elegance for both business and leisure travel.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 8' },
+          { k:'bag',  v:'Baggage capacity: 82 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: Yes' },
+          { k:'range',v:'Range: 5,350 km' },
+          { k:'speed',v:'Speed: 600 mph' },
+          { k:null,   v:'Interior: 23\'10\"L x 5\'7\"W x 5\'10\"H' },
+          { k:null,   v:'Cabin volume: 538 cubic ft' }
+        ]
+      },
+
+      OAD: {
+        title: 'C-FOAD Citation X',
+        body: 'The Citation X is the perfect choice for travelers who seek speed, luxury, and efficiency. This private plane can reach speeds of Mach 0.9 at an altitude of 51,000 feet. It features a stand-up cabin, an enclosed lavatory, and double club seating—making it the ideal aircraft for long-range missions.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 8 (+1 on lav seat)' },
+          { k:'bag',  v:'Baggage capacity: 82 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: Yes' },
+          { k:'range',v:'Range: 5,350 km' },
+          { k:'speed',v:'Speed: 600 mph' },
+          { k:null,   v:'Interior: 23\'10\"L x 5\'7\"W x 5\'10\"H' },
+          { k:null,   v:'Cabin volume: 538 cubic ft' }
+        ]
+      },
+
+      TLH: {
+        title: 'C-FTLH Falcon 2000EX',
+        body: 'From transcontinental flights to executive getaways, the Falcon 2000EX private plane combines refined design, comfort, and versatile functionality. The cabin is remarkably quiet and filled with natural light, providing spacious comfort for all guests. Plus, with 6 feet 2 inches of headroom, every moment of your journey is met with luxury and ease.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 9' },
+          { k:'bag',  v:'Baggage capacity: 131 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: Yes' },
+          { k:'range',v:'Range: 6,050 km' },
+          { k:'speed',v:'Speed: 550 mph' },
+          { k:null,   v:'Interior: 28\'2\"L x 7\u20198\"W x 6\'2\"H' },
+          { k:null,   v:'Cabin volume: 1,024 cubic ft' }
+        ]
+      },
+
+      VDN: {
+        title: 'C-FVDN Challenger 605',
+        body: 'Designed to host up to 12 guests, the Challenger 605 is the ideal private plane for coast-to-coast travel. With large cabin windows and a six-foot standing headroom it creates an open, airy atmosphere, ensuring a relaxing and luxurious journey on non-stop flights of up to 8 hours.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 12' },
+          { k:'bag',  v:'Baggage capacity: 115 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: No' },
+          { k:'range',v:'Range: 6,050 km' },
+          { k:'speed',v:'Speed: 540 mph' },
+          { k:null,   v:'Interior: 28\'4\"L x 8\'2\"W x 6\'0\"H' },
+          { k:null,   v:'Cabin volume: 1,150 cubic ft' }
+        ]
+      },
+
+      KAI: {
+        title: 'C-FKAI Challenger 605',
+        body: 'Whether crossing the continent or enjoying a coast-to-coast escape, the Challenger 605 offers a wide-cabin experience, meticulously designed to elevate every aspect of your journey. With large cabin windows and six-foot standing headroom, this private plane provides unmatched comfort and freedom on non-stop flights up to 8 hours.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 12' },
+          { k:'bag',  v:'Baggage capacity: 115 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: Yes' },
+          { k:'range',v:'Range: 6,050 km' },
+          { k:'speed',v:'Speed: 540 mph' },
+          { k:null,   v:'Interior: 28\'4\"L x 8\'2\"W x 6\'0\"H' },
+          { k:null,   v:'Cabin volume: 1,150 cubic ft' }
+        ]
+      },
+
+      TJO: {
+        title: 'C-GTJO Challenger 604',
+        body: 'The Challenger 604 redefines long-haul luxury. With a wide-cabin experience, large windows and six-foot standing headroom creates an airy, relaxing atmosphere for non-stop flights up to 8 hours. Designed for up to 12 guests, this private plane is ideal for business meetings or leisure escapes.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 12' },
+          { k:'bag',  v:'Baggage capacity: 115 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: Yes' },
+          { k:'range',v:'Range: 6,050 km' },
+          { k:'speed',v:'Speed: 540 mph' },
+          { k:null,   v:'Interior: 28\'4\"L x 8\'2\"W x 6\'0\"H' },
+          { k:null,   v:'Cabin volume: 1,150 cubic ft' }
+        ]
+      },
+
+      HHM: {
+        title: 'C-FHHM Challenger 604',
+        body: 'The Challenger 604 redefines long-haul luxury. With a wide-cabin experience, large windows and six-foot standing headroom creates an airy, relaxing atmosphere for non-stop flights up to 8 hours. Designed for up to 12 guests, this private plane is ideal for business meetings or leisure escapes.',
+        stats: [
+          { k:'pax',  v:'Passenger capacity: 12' },
+          { k:'bag',  v:'Baggage capacity: 115 cubic ft' },
+          { k:'wifi', v:'Wi-Fi: Yes' },
+          { k:'range',v:'Range: 6,050 km' },
+          { k:'speed',v:'Speed: 540 mph' },
+          { k:null,   v:'Interior: 28\'4\"L x 8\'2\"W x 6\'0\"H' },
+          { k:null,   v:'Cabin volume: 1,150 cubic ft' }
+        ]
+      }
+    };
+
+    const entry = aircraftText[code];
+    if (!entry) { infoEl.textContent = ''; return; }
+
+    let statsHtml = '';
+    for (const s of entry.stats){
+      const iconHtml = s.k ? ('<img class="stat-ico" src="' + (ICONS[s.k] || '') + '" alt="" loading="lazy" decoding="async">')
+                           : '<span class="stat-ico-spacer" aria-hidden="true"></span>';
+      statsHtml += '<div class="stat">' + iconHtml + '<span>' + s.v + '</span></div>';
+    }
+
+    infoEl.innerHTML =
+      '<div class="aircard">' +
+        '<h2 class="aircard-title">' + entry.title + '</h2>' +
+        '<p class="aircard-body">' + entry.body + '</p>' +
+        '<div class="aircard-stats">' + statsHtml + '</div>' +
+      '</div>';
+  })();
+
+
+  // EXT/INT toggle
+  (function(){
+    const toggleBtn = document.getElementById('toggleViewBtn');
+    const m = slug.match(/^(EXT|INT)_([\s\S]+)/i);
+    if(!toggleBtn) return;
+    if(m){
+      const currentPrefix = m[1].toUpperCase();
+      const rest = m[2];
+      toggleBtn.textContent = currentPrefix==='EXT'?'View interior':'View exterior';
+      toggleBtn.onclick = () => {
+        const newPrefix = currentPrefix==='EXT'?'INT':'EXT';
+        const url = new URL(location.href);
+        url.searchParams.set('slug', newPrefix+'_'+rest);
+        location.href = url.toString();
+      };
+    } else {
+      toggleBtn.style.display='none';
+    }
+  })();
+
+  const frameCount = parseInt(params.get('frameCount') || '90', 10);
+  const ext = (params.get('ext') || 'png').toLowerCase();
+  const cursorURL = params.get('cursor') || 'https://airpartners-digitaljets.b-cdn.net/Jets/button.png';
+  const mode = params.get('mode') || 'preloadAll';
+  const fps = parseInt(params.get('speed') || '30', 10);
+
+  const baseUrl = DEFAULT_BASE.replace(/\/$/,'') + '/' + slug + '/';
+
+  const cnv = document.getElementById('cnv');
+  const ctx = cnv.getContext('2d', { alpha: true, desynchronized: true });
+  const notice = document.getElementById('notice');
+  const stage = document.getElementById('stage');
+  const svg = document.getElementById('svg');
+  const pathTrack = document.getElementById('pathTrack');
+  const pathProgress = document.getElementById('pathProgress');
+  const cursorImg = document.getElementById('cursorImg');
+
+  let images = new Array(frameCount).fill(null);
+  let frame = 0;
+  let targetFrame = 0;
+
+  let cssW = 0, cssH = 0;
+
+  // Drag states
+  let stageDragging = false;
+  let stageDragStartX = 0;
+  let stageDragStartFrame = 0;
+  let stageWidth = 1;
+
+  let sliderDragging = false;
+  let sliderDragStartX = 0;
+  let sliderDragStartFrame = 0;
+  let sliderWidth = 1;
+
+  function pad4(n){ return String(n).padStart(4,'0'); }
+  function urlFor(i){ return baseUrl + 'frame_' + pad4(i) + '.' + ext; }
+
+  async function loadBitmap(url){
+    try{
+      const res = await fetch(url, { cache: 'force-cache' });
+      if(!res.ok) return null;
+      const blob = await res.blob();
+      return await createImageBitmap(blob);
+    } catch { return null; }
+  }
+
+  function drawFrame(index){
+    const bmp = images[index];
+    if(!bmp) return;
+    ctx.clearRect(0,0,cssW,cssH);
+    ctx.drawImage(bmp,0,0,cssW,cssH);
+  }
+
+  function frameToRatio(f){ return f/(frameCount-1); }
+  function updateProgress(){
+    const r = frameToRatio(frame);
+    pathProgress.setAttribute('stroke-dasharray', (r*100)+' 100');
+    updateCursor(r);
+  }
+
+  function updateCursor(ratio){
+    const p = pathTrack;
+    const len = p.getTotalLength();
+    const pt = p.getPointAtLength(Math.max(0,Math.min(len,ratio*len)));
+    cursorImg.setAttribute('x', (pt.x - 42));
+    cursorImg.setAttribute('y', (pt.y - 42));
+  }
+
+  function renderLoop(){
+    if(frame !== targetFrame){
+      frame = targetFrame;
+      drawFrame(frame);
+      updateProgress();
+    }
+    requestAnimationFrame(renderLoop);
+  }
+
+  async function preload(){
+    if(mode === 'preloadAll'){
+      const urls = Array.from({length:frameCount},(_,i)=>urlFor(i));
+      const bitmaps = await Promise.all(urls.map(loadBitmap));
+      bitmaps.forEach((bmp,i)=>images[i]=bmp);
+      drawFrame(0);
+      updateProgress();
+      notice.style.display='none';
+      autoplay();
+    } else {
+      const eager = Math.min(10,frameCount);
+      const eagerUrls = Array.from({length:eager},(_,i)=>urlFor(i));
+      const eagerBitmaps = await Promise.all(eagerUrls.map(loadBitmap));
+      eagerBitmaps.forEach((bmp,i)=>images[i]=bmp);
+      drawFrame(0);
+      updateProgress();
+      notice.style.display='none';
+      autoplay();
+      const rest = Array.from({length:frameCount-eager},(_,j)=>urlFor(j+eager));
+      Promise.all(rest.map((u,j)=>loadBitmap(u).then(b=>images[eager+j]=b)));
+    }
+  }
+
+  function resizeCanvas(){
+    const rect = stage.getBoundingClientRect();
+    cssW = rect.width;
+    cssH = rect.height;
+    const dpr = Math.min(window.devicePixelRatio||1,2);
+    cnv.width = cssW*dpr;
+    cnv.height = cssH*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    drawFrame(frame);
+  }
+  new ResizeObserver(resizeCanvas).observe(stage);
+
+  // --- STAGE DRAG (full width == full rotation) ---
+  stage.addEventListener('pointerdown',e=>{
+    stopAutoplay();
+    stageWidth = stage.getBoundingClientRect().width || 1;
+    stageDragging = true;
+    stageDragStartX = e.clientX;
+    stageDragStartFrame = targetFrame;
+    stage.setPointerCapture(e.pointerId);
+  });
+  stage.addEventListener('pointermove',e=>{
+    if(!stageDragging) return;
+    const dx = e.clientX - stageDragStartX;
+    const fraction = dx / stageWidth;
+    const delta = Math.round(fraction*(frameCount-1));
+    let f = stageDragStartFrame - delta;
+    f = ( (f%frameCount)+frameCount )%frameCount;
+    targetFrame = f;
+  });
+  stage.addEventListener('pointerup',()=>stageDragging=false);
+  stage.addEventListener('pointercancel',()=>stageDragging=false);
+  stage.addEventListener('pointerleave',()=>stageDragging=false);
+
+  // --- SLIDER DRAG (relative, works even in portrait) ---
+  cursorImg.setAttribute('href', cursorURL);
+
+  cursorImg.addEventListener('pointerdown', e=>{
+    stopAutoplay();
+    sliderWidth = svg.getBoundingClientRect().width || 1;
+    sliderDragging = true;
+    sliderDragStartX = e.clientX;
+    sliderDragStartFrame = targetFrame;
+    cursorImg.setPointerCapture(e.pointerId);
+  });
+
+  cursorImg.addEventListener('pointermove', e=>{
+    if(!sliderDragging) return;
+    const dx = e.clientX - sliderDragStartX;
+    const fraction = dx / sliderWidth;
+    const delta = Math.round(fraction*(frameCount-1));
+    let f = sliderDragStartFrame + delta;
+    if (f < 0) f = 0;
+    if (f > frameCount-1) f = frameCount-1;
+    targetFrame = f;
+  });
+
+cursorImg.addEventListener('pointerup', ()=>sliderDragging=false);
+  cursorImg.addEventListener('pointercancel', ()=>sliderDragging=false);
+  cursorImg.addEventListener('pointerleave', ()=>sliderDragging=false);
+
+  // Tap anywhere on curve to jump
+  svg.addEventListener('pointerdown', e=>{
+    if(e.target===cursorImg) return;
+    const rect = svg.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const p = pathTrack;
+    const len = p.getTotalLength();
+    let best=0, bestDist=Infinity;
+    for(let i=0;i<=160;i++){
+      const t=i/160;
+      const pt=p.getPointAtLength(t*len);
+      const dx=pt.x-x, dy=pt.y-y, d=dx*dx+dy*dy;
+      if(d<bestDist){ bestDist=d; best=t; }
+    }
+    targetFrame = Math.round(best*(frameCount-1));
+  });
+
+  async function autoplay(){
+    // Cancellable autoplay (stops cleanly on any user interaction)
+    autoplayCancel = false;
+    autoplayActive = true;
+
+    const delay = 1000 / fps;
+
+    // forward
+    for(let f=0; f<frameCount; f++){
+      if (autoplayCancel) { autoplayActive = false; return; }
+      targetFrame = f;
+      await new Promise(r => setTimeout(r, delay));
+    }
+    // backward (skip last duplicate frame)
+    for(let f=frameCount-2; f>=0; f--){
+      if (autoplayCancel) { autoplayActive = false; return; }
+      targetFrame = f;
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    autoplayActive = false;
+  }
+
+  resizeCanvas();
+  requestAnimationFrame(renderLoop);
+  preload();
+
+})();
+</script>
+</body>
+</html>
