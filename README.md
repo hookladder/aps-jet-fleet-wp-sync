@@ -7,17 +7,23 @@ Self-hosted 360° jet viewer for the Air Partners fleet page (Elementor), served
 - `EXT_xxx/`, `INT_xxx/` – 90-frame WebP spins (`frame_0000.webp` …) per aircraft.
 - `*.png` – viewer icons and slider cursor.
 - `Air2Air/`, `Section/`, `Animation/` – static CGIs and clip.
-- `index.html` – standalone preview of the fleet render (viewer + interior gallery). `?jet=VDN`
+- `fleet/fleet.js`, `fleet/fleet.css` – fleet render (viewer iframe, interior gallery, lightbox) used by Elementor.
+- `index.html` – local preview using the same files. `?jet=VDN`
 
 Keep the folder structure: the viewer builds `<base>/<slug>/frame_NNNN.webp`.
 
 ## Elementor
-Point the fleet HTML widget to:
+One HTML widget replaces both old widgets (viewer + gallery + lightbox):
 
-```js
-const urlBase = "https://hookladder.github.io/aps-jet-fleet-wp-sync/viewer/AP_Viewer.html?slug=EXT_";
-const urlParams = "&ext=webp&mode=eager";
+```html
+<link rel="stylesheet" href="https://hookladder.github.io/aps-jet-fleet-wp-sync/fleet/fleet.css">
+<div id="aps-fleet" data-jet="VDN"></div>
+<script src="https://hookladder.github.io/aps-jet-fleet-wp-sync/fleet/fleet.js" defer></script>
 ```
+
+- Fleet menu items with `id="f_xxx"` (e.g. `f_vdn`) switch the jet.
+- `?jet=XXX` in the page URL overrides `data-jet`.
+- Gallery photos are listed in `fleet/fleet.js` (`GALLERY`); jets without photos hide the gallery.
 
 ## Local preview
 `fetch()` needs HTTP, not `file://`:

@@ -1,0 +1,46 @@
+/* APS Fleet render: viewer iframe, interior gallery, lightbox */
+
+/* Viewer */
+#target-fleet-iframe { display: block; width: 100%; min-height: 1280px; border: 0; overflow: hidden; }
+@media (max-width: 1280px) { #target-fleet-iframe { min-height: 980px; } }
+@media (max-width: 767px)  { #target-fleet-iframe { min-height: 1080px; } }
+
+/* Gallery */
+.gallery-title { margin: 8px 0 16px; text-align: center; font: 700 40px/48px "Antonio", sans-serif; color: #000; }
+.gallery-fleet-container { position: relative; display: flex; align-items: center; width: 100%; max-width: 1200px; margin: 30px auto; }
+.carousel-viewport { width: 100%; overflow: hidden; padding: 10px 0; }
+.carousel-track { display: flex; gap: 15px; transition: transform .4s ease-in-out; }
+.carousel-item { flex: 0 0 calc(25% - 11.25px); min-width: 0; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,.1); cursor: pointer; transition: transform .3s, filter .3s; }
+.carousel-item:hover { position: relative; z-index: 1; transform: scale(1.03); filter: brightness(.6); }
+
+.carousel-control { position: absolute; display: flex; align-items: center; justify-content: center; padding: 12px; border: 0; border-radius: 4px; background: transparent; color: #000; font-size: 24px; cursor: pointer; transition: background-color .3s; }
+.carousel-control:hover { background: #333; }
+.carousel-control:disabled { color: #ccc; opacity: .6; cursor: not-allowed; }
+.prev-btn { left: -50px; }
+.next-btn { right: -50px; }
+
+@media (max-width: 767px) {
+    .carousel-item { flex-basis: calc(50% - 7.5px); }
+    .prev-btn { left: -25px; }
+    .next-btn { right: -25px; }
+}
+
+/* Lightbox */
+.simple-lightbox-container { display: none; position: fixed; inset: 0; z-index: 9999999; justify-content: center; align-items: center; background: rgba(0,0,0,.85); }
+.simple-lightbox-container.is-open { display: flex; }
+.lightbox-wrapper { position: relative; max-width: 90vw; max-height: 85vh; }
+.lightbox-wrapper img { display: block; max-width: 100%; max-height: 85vh; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,.5); }
+
+.simple-lightbox-close { position: absolute; top: -45px; right: 0; padding: 0; border: 0; background: none; color: #fff; font: 700 50px/1 Arial, sans-serif; cursor: pointer; transition: color .3s; }
+.simple-lightbox-close:hover { color: #ccc; }
+
+.lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); padding: 10px 15px; border: 0; border-radius: 4px; background: rgba(0,0,0,.6); color: #fff; font-size: 30px; cursor: pointer; transition: background-color .3s; }
+.lightbox-nav:hover { background: rgba(0,0,0,.9); }
+.prev-lb { left: -60px; }
+.next-lb { right: -60px; }
+
+@media (max-width: 768px) {
+    .simple-lightbox-close { top: -40px; }
+    .prev-lb { left: 10px; }
+    .next-lb { right: 10px; }
+}
