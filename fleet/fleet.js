@@ -10,9 +10,8 @@
  * ?jet=XXX in the page URL overrides data-jet.
  */
 (function () {
-    // Viewer lives next to this script's folder: <repo>/viewer/AP_Viewer.html
-    const scriptSrc = document.currentScript && document.currentScript.src;
-    const VIEWER = new URL('../viewer/AP_Viewer.html', scriptSrc || location.href).href;
+    // Absolute on purpose: WP Rocket re-hosts this script under /wp-content/cache/, so a path relative to it breaks
+    const VIEWER = 'https://hookladder.github.io/aps-jet-fleet-wp-sync/viewer/AP_Viewer.html';
     const VIEWER_PARAMS = '&ext=webp&mode=eager';
 
     const WP = 'https://airpartners.takeflightgroup.com/wp-content/uploads/2026/03/';
